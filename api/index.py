@@ -1,11 +1,12 @@
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
 import requests
+from requests.auth import HTTPBasicAuth
 import json
 
-HUUM_API = "https://api.huum.eu/action/home/status"
-HUUM_START = "https://api.huum.eu/action/home/start"
-HUUM_STOP = "https://api.huum.eu/action/home/stop"
+HUUM_API = "https://sauna.huum.eu/action/home/status"
+HUUM_START = "https://sauna.huum.eu/action/home/start"
+HUUM_STOP = "https://sauna.huum.eu/action/home/stop"
 
 def get_session(cookies):
     session = {}
@@ -32,10 +33,7 @@ def clear_session_cookies():
 def huum_status(username, password):
     """Get sauna status - returns dict or None on failure"""
     try:
-        resp = requests.post(HUUM_API, data={
-            'username': username,
-            'password': password
-        }, timeout=10)
+        resp = requests.get(HUUM_API, auth=HTTPBasicAuth(username, password), timeout=10)
         if resp.status_code == 200:
             return resp.json()
         return None
@@ -45,11 +43,12 @@ def huum_status(username, password):
 def huum_start(username, password, temperature):
     """Turn on sauna"""
     try:
-        resp = requests.post(HUUM_START, data={
-            'username': username,
-            'password': password,
-            'targetTemperature': temperature
-        }, timeout=10)
+        resp = requests.post(
+            HUUM_START,
+            auth=HTTPBasicAuth(username, password),
+            json={'targetTemperature': temperature},
+            timeout=10
+        )
         return resp.status_code == 200
     except:
         return False
@@ -57,10 +56,11 @@ def huum_start(username, password, temperature):
 def huum_stop(username, password):
     """Turn off sauna"""
     try:
-        resp = requests.post(HUUM_STOP, data={
-            'username': username,
-            'password': password
-        }, timeout=10)
+        resp = requests.post(
+            HUUM_STOP,
+            auth=HTTPBasicAuth(username, password),
+            timeout=10
+        )
         return resp.status_code == 200
     except:
         return False
