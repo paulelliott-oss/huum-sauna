@@ -57,7 +57,20 @@ def huum_start(username, password, temperature):
             json={'targetTemperature': temperature},
             timeout=10
         )
-        return resp.status_code == 200
+        if resp.status_code == 200:
+            # Check if response contains an error
+            text = resp.text.strip()
+            # API sometimes wraps JSON in parentheses
+            if text.startswith('(') and text.endswith(');'):
+                text = text[1:-2]
+            try:
+                data = json.loads(text)
+                if data.get('error') == True:
+                    return False
+            except:
+                pass
+            return True
+        return False
     except:
         return False
 
@@ -87,6 +100,7 @@ def render_page(logged_in=False, status=None, error=None, success=None):
         humidity = status.get('humidity', 0)
         # API returns "door": true when door is CLOSED (door_closed = true)
         door_closed = status.get('door', False)
+        remote_safe = status.get('remoteSafetyState') == 'safe'
 
         if status_code in (230, 231):
             badge = '<span style="background:#fb923c;color:#7c2d12;padding:10px 20px;border-radius:25px;font-weight:600">🔥 HEATING</span>'
@@ -118,11 +132,13 @@ def render_page(logged_in=False, status=None, error=None, success=None):
 
         if not door_closed:
             status_html += '<div class="alert alert-warning">⚠️ Close the door before turning on</div>'
+        elif not remote_safe:
+            status_html += '<div class="alert alert-warning">⚠️ Remote safety not met - sauna may be too cold or have another safety issue</div>'
 
         if status_code in (230, 231, 232):
             btn = '<button type="submit" name="action" value="off" class="btn btn-off">Turn Off</button>'
         else:
-            disabled = 'disabled' if not door_closed else ''
+            disabled = 'disabled' if (not door_closed or not remote_safe) else ''
             btn = f'<button type="submit" name="action" value="on" class="btn btn-on" {disabled}>Turn On Sauna</button>'
 
         controls_html = f'''
@@ -278,7 +294,7 @@ class handler(BaseHTTPRequestHandler):
                     self.send_header('Location', f'/?success=Heating+to+{temp_f}F')
                 else:
                     self.send_response(302)
-                    self.send_header('Location', '/?error=Could+not+turn+on')
+                    self.send_header('Location', '/?error=Cannot+turn+on+-+check+safety+warnings')
                 self.end_headers()
             elif action == 'off':
                 if huum_stop(session['huum_user'], session['huum_pass']):
