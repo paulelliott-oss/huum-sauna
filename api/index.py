@@ -75,7 +75,8 @@ def render_page(logged_in=False, status=None, error=None, success=None):
         status_code = status.get('statusCode', 0)
         temp = status.get('temperature', 0)
         humidity = status.get('humidity', 0)
-        door = status.get('door', False)
+        # API returns "door": true when door is CLOSED (door_closed = true)
+        door_closed = status.get('door', False)
 
         if status_code in (230, 231):
             badge = '<span style="background:#fb923c;color:#7c2d12;padding:10px 20px;border-radius:25px;font-weight:600">🔥 HEATING</span>'
@@ -84,8 +85,8 @@ def render_page(logged_in=False, status=None, error=None, success=None):
         else:
             badge = '<span style="background:#6b7280;color:#fff;padding:10px 20px;border-radius:25px;font-weight:600">○ OFF</span>'
 
-        door_style = "color:#fbbf24" if door else "color:#4ade80"
-        door_text = "OPEN" if door else "CLOSED"
+        door_style = "color:#4ade80" if door_closed else "color:#fbbf24"
+        door_text = "CLOSED" if door_closed else "OPEN"
 
         target_line = ""
         if status_code in (230, 231, 232) and target_temp:
@@ -105,13 +106,13 @@ def render_page(logged_in=False, status=None, error=None, success=None):
         </div>
         '''
 
-        if door:
+        if not door_closed:
             status_html += '<div class="alert alert-warning">⚠️ Close the door before turning on</div>'
 
         if status_code in (230, 231, 232):
             btn = '<button type="submit" name="action" value="off" class="btn btn-off">Turn Off</button>'
         else:
-            disabled = 'disabled' if door else ''
+            disabled = 'disabled' if not door_closed else ''
             btn = f'<button type="submit" name="action" value="on" class="btn btn-on" {disabled}>Turn On Sauna</button>'
 
         controls_html = f'''
