@@ -120,13 +120,7 @@ def render_page(logged_in=False, status=None, error=None, success=None):
 
         status_html = f'''
         <div class="card">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
-                <div style="flex:1"></div>
-                <div style="flex:1;text-align:center">{badge}</div>
-                <div style="flex:1;text-align:right">
-                    <a href="/" style="color:rgba(255,255,255,0.6);text-decoration:none;font-size:24px" title="Refresh status">↻</a>
-                </div>
-            </div>
+            <div style="text-align:center;margin-bottom:15px">{badge}</div>
             <div style="text-align:center;margin:30px 0">
                 <span style="font-size:80px;font-weight:200">{temp_f}<span style="font-size:32px;vertical-align:super">°F</span></span>
                 {target_line}
@@ -165,11 +159,13 @@ def render_page(logged_in=False, status=None, error=None, success=None):
                 {btn}
             </form>
         </div>
-        <a href="/logout" style="display:block;text-align:center;margin-top:25px;color:rgba(255,255,255,0.4);text-decoration:none">Disconnect</a>
+        <a href="/" style="display:block;text-align:center;margin-top:20px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:15px">↻ Refresh Status</a>
+        <a href="/logout" style="display:block;text-align:center;margin-top:15px;color:rgba(255,255,255,0.4);text-decoration:none;font-size:14px">Disconnect</a>
         '''
     elif logged_in:
         controls_html = '''<div class="card"><p style="text-align:center;color:rgba(255,255,255,0.6)">Could not connect to sauna. <a href="/" style="color:#f97316">Retry</a></p></div>
-        <a href="/logout" style="display:block;text-align:center;margin-top:25px;color:rgba(255,255,255,0.4);text-decoration:none">Disconnect</a>'''
+        <a href="/" style="display:block;text-align:center;margin-top:20px;color:rgba(255,255,255,0.6);text-decoration:none;font-size:15px">↻ Refresh Status</a>
+        <a href="/logout" style="display:block;text-align:center;margin-top:15px;color:rgba(255,255,255,0.4);text-decoration:none;font-size:14px">Disconnect</a>'''
     else:
         controls_html = '''
         <div class="card">
