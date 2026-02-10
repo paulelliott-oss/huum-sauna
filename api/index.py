@@ -8,6 +8,14 @@ HUUM_API = "https://sauna.huum.eu/action/home/status"
 HUUM_START = "https://sauna.huum.eu/action/home/start"
 HUUM_STOP = "https://sauna.huum.eu/action/home/stop"
 
+def c_to_f(celsius):
+    """Convert Celsius to Fahrenheit"""
+    return round(celsius * 9/5 + 32)
+
+def f_to_c(fahrenheit):
+    """Convert Fahrenheit to Celsius"""
+    return round((fahrenheit - 32) * 5/9)
+
 def get_session(cookies):
     session = {}
     if cookies:
@@ -71,9 +79,11 @@ def render_page(logged_in=False, status=None, error=None, success=None):
     target_temp = 80
 
     if logged_in and status:
-        target_temp = status.get('targetTemperature') or 80
+        target_temp_c = status.get('targetTemperature') or 80
+        target_temp_f = c_to_f(target_temp_c)
         status_code = status.get('statusCode', 0)
-        temp = status.get('temperature', 0)
+        temp_c = status.get('temperature', 0)
+        temp_f = c_to_f(temp_c)
         humidity = status.get('humidity', 0)
         # API returns "door": true when door is CLOSED (door_closed = true)
         door_closed = status.get('door', False)
@@ -89,14 +99,14 @@ def render_page(logged_in=False, status=None, error=None, success=None):
         door_text = "CLOSED" if door_closed else "OPEN"
 
         target_line = ""
-        if status_code in (230, 231, 232) and target_temp:
-            target_line = f'<div style="color:rgba(255,255,255,0.6);font-size:16px;margin-top:8px">Target: {target_temp}°C</div>'
+        if status_code in (230, 231, 232) and target_temp_c:
+            target_line = f'<div style="color:rgba(255,255,255,0.6);font-size:16px;margin-top:8px">Target: {target_temp_f}°F</div>'
 
         status_html = f'''
         <div class="card">
             <div style="text-align:center;margin-bottom:15px">{badge}</div>
             <div style="text-align:center;margin:30px 0">
-                <span style="font-size:80px;font-weight:200">{temp}<span style="font-size:32px;vertical-align:super">°C</span></span>
+                <span style="font-size:80px;font-weight:200">{temp_f}<span style="font-size:32px;vertical-align:super">°F</span></span>
                 {target_line}
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:20px">
@@ -121,11 +131,11 @@ def render_page(logged_in=False, status=None, error=None, success=None):
                 <div style="margin-bottom:25px">
                     <label style="display:block;margin-bottom:12px;color:rgba(255,255,255,0.7)">Set Temperature</label>
                     <div style="display:flex;align-items:center;gap:12px">
-                        <span style="color:rgba(255,255,255,0.5)">40°</span>
-                        <input type="range" name="temperature" min="40" max="110" value="{target_temp}" class="temp-slider" id="tempSlider">
-                        <span style="color:rgba(255,255,255,0.5)">110°</span>
+                        <span style="color:rgba(255,255,255,0.5)">104°</span>
+                        <input type="range" name="temperature" min="104" max="230" value="{target_temp_f}" class="temp-slider" id="tempSlider">
+                        <span style="color:rgba(255,255,255,0.5)">230°</span>
                     </div>
-                    <div style="text-align:center;margin-top:15px"><span style="font-size:28px;font-weight:700;color:#f97316" id="tempValue">{target_temp}°C</span></div>
+                    <div style="text-align:center;margin-top:15px"><span style="font-size:28px;font-weight:700;color:#f97316" id="tempValue">{target_temp_f}°F</span></div>
                 </div>
                 {btn}
             </form>
@@ -259,12 +269,13 @@ class handler(BaseHTTPRequestHandler):
                 return
 
             action = params.get('action', [''])[0]
-            temp = int(params.get('temperature', ['80'])[0])
+            temp_f = int(params.get('temperature', ['176'])[0])  # Default 176°F = 80°C
+            temp_c = f_to_c(temp_f)
 
             if action == 'on':
-                if huum_start(session['huum_user'], session['huum_pass'], temp):
+                if huum_start(session['huum_user'], session['huum_pass'], temp_c):
                     self.send_response(302)
-                    self.send_header('Location', f'/?success=Heating+to+{temp}C')
+                    self.send_header('Location', f'/?success=Heating+to+{temp_f}F')
                 else:
                     self.send_response(302)
                     self.send_header('Location', '/?error=Could+not+turn+on')
