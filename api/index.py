@@ -101,6 +101,8 @@ def render_page(logged_in=False, status=None, error=None, success=None):
         # API returns "door": true when door is CLOSED (door_closed = true)
         door_closed = status.get('door', False)
         remote_safe = status.get('remoteSafetyState') == 'safe'
+        sauna_config = status.get('saunaConfig', {})
+        child_lock = sauna_config.get('childLock', 'OFF')
 
         if status_code in (230, 231):
             badge = '<span style="background:#fb923c;color:#7c2d12;padding:10px 20px;border-radius:25px;font-weight:600">🔥 HEATING</span>'
@@ -118,14 +120,21 @@ def render_page(logged_in=False, status=None, error=None, success=None):
 
         status_html = f'''
         <div class="card">
-            <div style="text-align:center;margin-bottom:15px">{badge}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:15px">
+                <div style="flex:1"></div>
+                <div style="flex:1;text-align:center">{badge}</div>
+                <div style="flex:1;text-align:right">
+                    <a href="/" style="color:rgba(255,255,255,0.6);text-decoration:none;font-size:24px" title="Refresh status">↻</a>
+                </div>
+            </div>
             <div style="text-align:center;margin:30px 0">
                 <span style="font-size:80px;font-weight:200">{temp_f}<span style="font-size:32px;vertical-align:super">°F</span></span>
                 {target_line}
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:20px">
-                <div class="info-box"><div class="info-label">Humidity</div><div style="font-size:20px;font-weight:600">{humidity}%</div></div>
-                <div class="info-box"><div class="info-label">Door</div><div style="font-size:20px;font-weight:600;{door_style}">{door_text}</div></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:20px">
+                <div class="info-box"><div class="info-label">Humidity</div><div style="font-size:18px;font-weight:600">{humidity}%</div></div>
+                <div class="info-box"><div class="info-label">Door</div><div style="font-size:18px;font-weight:600;{door_style}">{door_text}</div></div>
+                <div class="info-box"><div class="info-label">Safety</div><div style="font-size:18px;font-weight:600;{'color:#4ade80' if remote_safe else 'color:#fbbf24'}">{"OK" if remote_safe else "BLOCK"}</div></div>
             </div>
         </div>
         '''
