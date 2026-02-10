@@ -1,12 +1,13 @@
 from http.server import BaseHTTPRequestHandler
 from urllib.parse import parse_qs, urlparse
+import requests
 import json
-import asyncio
-import os
 
-# Simple cookie-based session (stored client-side, encrypted would be better for prod)
+HUUM_API = "https://api.huum.eu/action/home/status"
+HUUM_START = "https://api.huum.eu/action/home/start"
+HUUM_STOP = "https://api.huum.eu/action/home/stop"
+
 def get_session(cookies):
-    """Parse session from cookies"""
     session = {}
     if cookies:
         for cookie in cookies.split(';'):
@@ -17,48 +18,52 @@ def get_session(cookies):
     return session
 
 def set_session_cookies(username, password):
-    """Create session cookies"""
     return [
         f"huum_user={username}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400",
         f"huum_pass={password}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400"
     ]
 
 def clear_session_cookies():
-    """Clear session cookies"""
     return [
         "huum_user=; Path=/; HttpOnly; Max-Age=0",
         "huum_pass=; Path=/; HttpOnly; Max-Age=0"
     ]
 
-async def get_sauna_status(username, password):
-    from huum.huum import Huum
-    huum = Huum(username=username, password=password)
-    await huum.open_session()
+def huum_status(username, password):
+    """Get sauna status - returns dict or None on failure"""
     try:
-        return await huum.status()
-    finally:
-        await huum.close_session()
+        resp = requests.post(HUUM_API, data={
+            'username': username,
+            'password': password
+        }, timeout=10)
+        if resp.status_code == 200:
+            return resp.json()
+        return None
+    except:
+        return None
 
-async def turn_on_sauna(username, password, temperature):
-    from huum.huum import Huum
-    huum = Huum(username=username, password=password)
-    await huum.open_session()
+def huum_start(username, password, temperature):
+    """Turn on sauna"""
     try:
-        await huum.turn_on(temperature=temperature)
-    finally:
-        await huum.close_session()
+        resp = requests.post(HUUM_START, data={
+            'username': username,
+            'password': password,
+            'targetTemperature': temperature
+        }, timeout=10)
+        return resp.status_code == 200
+    except:
+        return False
 
-async def turn_off_sauna(username, password):
-    from huum.huum import Huum
-    huum = Huum(username=username, password=password)
-    await huum.open_session()
+def huum_stop(username, password):
+    """Turn off sauna"""
     try:
-        await huum.turn_off()
-    finally:
-        await huum.close_session()
-
-def run_async(coro):
-    return asyncio.get_event_loop().run_until_complete(coro)
+        resp = requests.post(HUUM_STOP, data={
+            'username': username,
+            'password': password
+        }, timeout=10)
+        return resp.status_code == 200
+    except:
+        return False
 
 def render_page(logged_in=False, status=None, error=None, success=None):
     status_html = ""
@@ -66,37 +71,47 @@ def render_page(logged_in=False, status=None, error=None, success=None):
     target_temp = 80
 
     if logged_in and status:
-        target_temp = status.targetTemperature or 80
-        if status.statusCode in (230, 231):
+        target_temp = status.get('targetTemperature') or 80
+        status_code = status.get('statusCode', 0)
+        temp = status.get('temperature', 0)
+        humidity = status.get('humidity', 0)
+        door = status.get('door', False)
+
+        if status_code in (230, 231):
             badge = '<span style="background:#fb923c;color:#7c2d12;padding:10px 20px;border-radius:25px;font-weight:600">🔥 HEATING</span>'
-        elif status.statusCode == 232:
+        elif status_code == 232:
             badge = '<span style="background:#4ade80;color:#166534;padding:10px 20px;border-radius:25px;font-weight:600">✓ READY</span>'
         else:
             badge = '<span style="background:#6b7280;color:#fff;padding:10px 20px;border-radius:25px;font-weight:600">○ OFF</span>'
 
-        door_class = "color:#fbbf24" if status.door else "color:#4ade80"
-        door_text = "OPEN" if status.door else "CLOSED"
+        door_style = "color:#fbbf24" if door else "color:#4ade80"
+        door_text = "OPEN" if door else "CLOSED"
+
+        target_line = ""
+        if status_code in (230, 231, 232) and target_temp:
+            target_line = f'<div style="color:rgba(255,255,255,0.6);font-size:16px;margin-top:8px">Target: {target_temp}°C</div>'
 
         status_html = f'''
         <div class="card">
             <div style="text-align:center;margin-bottom:15px">{badge}</div>
             <div style="text-align:center;margin:30px 0">
-                <span style="font-size:80px;font-weight:200">{status.temperature}<span style="font-size:32px;vertical-align:super">°C</span></span>
+                <span style="font-size:80px;font-weight:200">{temp}<span style="font-size:32px;vertical-align:super">°C</span></span>
+                {target_line}
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:20px">
-                <div class="info-box"><div class="info-label">Humidity</div><div style="font-size:20px;font-weight:600">{status.humidity}%</div></div>
-                <div class="info-box"><div class="info-label">Door</div><div style="font-size:20px;font-weight:600;{door_class}">{door_text}</div></div>
+                <div class="info-box"><div class="info-label">Humidity</div><div style="font-size:20px;font-weight:600">{humidity}%</div></div>
+                <div class="info-box"><div class="info-label">Door</div><div style="font-size:20px;font-weight:600;{door_style}">{door_text}</div></div>
             </div>
         </div>
         '''
 
-        if status.door:
+        if door:
             status_html += '<div class="alert alert-warning">⚠️ Close the door before turning on</div>'
 
-        if status.statusCode in (230, 231, 232):
+        if status_code in (230, 231, 232):
             btn = '<button type="submit" name="action" value="off" class="btn btn-off">Turn Off</button>'
         else:
-            disabled = 'disabled' if status.door else ''
+            disabled = 'disabled' if door else ''
             btn = f'<button type="submit" name="action" value="on" class="btn btn-on" {disabled}>Turn On Sauna</button>'
 
         controls_html = f'''
@@ -117,7 +132,8 @@ def render_page(logged_in=False, status=None, error=None, success=None):
         <a href="/logout" style="display:block;text-align:center;margin-top:25px;color:rgba(255,255,255,0.4);text-decoration:none">Disconnect</a>
         '''
     elif logged_in:
-        controls_html = '<div class="card"><p style="text-align:center">Loading status...</p></div><a href="/logout" style="display:block;text-align:center;margin-top:25px;color:rgba(255,255,255,0.4);text-decoration:none">Disconnect</a>'
+        controls_html = '''<div class="card"><p style="text-align:center;color:rgba(255,255,255,0.6)">Could not connect to sauna. <a href="/" style="color:#f97316">Retry</a></p></div>
+        <a href="/logout" style="display:block;text-align:center;margin-top:25px;color:rgba(255,255,255,0.4);text-decoration:none">Disconnect</a>'''
     else:
         controls_html = '''
         <div class="card">
@@ -176,7 +192,7 @@ if(s)s.addEventListener('input',function(){{v.textContent=this.value+'°C'}});
 class handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
-        path = parsed.path
+        path = parsed.path.rstrip('/')
         cookies = self.headers.get('Cookie', '')
         session = get_session(cookies)
 
@@ -188,23 +204,14 @@ class handler(BaseHTTPRequestHandler):
             self.end_headers()
             return
 
-        # Main page
         logged_in = 'huum_user' in session and 'huum_pass' in session
         status = None
         error = None
 
         if logged_in:
-            try:
-                status = run_async(get_sauna_status(session['huum_user'], session['huum_pass']))
-            except Exception as e:
-                if '401' in str(e):
-                    self.send_response(302)
-                    for cookie in clear_session_cookies():
-                        self.send_header('Set-Cookie', cookie)
-                    self.send_header('Location', '/?error=Session+expired')
-                    self.end_headers()
-                    return
-                error = 'Connection error'
+            status = huum_status(session['huum_user'], session['huum_pass'])
+            if status is None:
+                error = 'Could not connect to sauna'
 
         query = parse_qs(parsed.query)
         error = error or (query.get('error', [None])[0])
@@ -218,7 +225,7 @@ class handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         parsed = urlparse(self.path)
-        path = parsed.path
+        path = parsed.path.rstrip('/')
         content_length = int(self.headers.get('Content-Length', 0))
         body = self.rfile.read(content_length).decode()
         params = parse_qs(body)
@@ -228,14 +235,16 @@ class handler(BaseHTTPRequestHandler):
         if path == '/login':
             username = params.get('username', [''])[0]
             password = params.get('password', [''])[0]
-            try:
-                run_async(get_sauna_status(username, password))
+
+            # Test credentials
+            status = huum_status(username, password)
+            if status is not None:
                 self.send_response(302)
                 for cookie in set_session_cookies(username, password):
                     self.send_header('Set-Cookie', cookie)
                 self.send_header('Location', '/?success=Connected!')
                 self.end_headers()
-            except:
+            else:
                 self.send_response(302)
                 self.send_header('Location', '/?error=Invalid+email+or+password')
                 self.end_headers()
@@ -251,30 +260,26 @@ class handler(BaseHTTPRequestHandler):
             action = params.get('action', [''])[0]
             temp = int(params.get('temperature', ['80'])[0])
 
-            try:
-                if action == 'on':
-                    run_async(turn_on_sauna(session['huum_user'], session['huum_pass'], temp))
+            if action == 'on':
+                if huum_start(session['huum_user'], session['huum_pass'], temp):
                     self.send_response(302)
-                    self.send_header('Location', f'/?success=Heating+to+{temp}°C')
-                    self.end_headers()
-                elif action == 'off':
-                    run_async(turn_off_sauna(session['huum_user'], session['huum_pass']))
+                    self.send_header('Location', f'/?success=Heating+to+{temp}C')
+                else:
+                    self.send_response(302)
+                    self.send_header('Location', '/?error=Could+not+turn+on')
+                self.end_headers()
+            elif action == 'off':
+                if huum_stop(session['huum_user'], session['huum_pass']):
                     self.send_response(302)
                     self.send_header('Location', '/?success=Turned+off')
-                    self.end_headers()
                 else:
                     self.send_response(302)
-                    self.send_header('Location', '/')
-                    self.end_headers()
-            except Exception as e:
-                if 'Safety' in str(type(e).__name__):
-                    self.send_response(302)
-                    self.send_header('Location', '/?error=Close+the+door+first!')
-                    self.end_headers()
-                else:
-                    self.send_response(302)
-                    self.send_header('Location', '/?error=Error,+try+again')
-                    self.end_headers()
+                    self.send_header('Location', '/?error=Could+not+turn+off')
+                self.end_headers()
+            else:
+                self.send_response(302)
+                self.send_header('Location', '/')
+                self.end_headers()
             return
 
         self.send_response(302)
